@@ -40,7 +40,8 @@ public class TelaJogo extends ScreenAdapter {
 
     private final Rectangle caixaCabecalho = new Rectangle(18, 20, 330, 62);
     private final Rectangle caixaStatus = new Rectangle(18, 90, 330, 50);
-    private final Rectangle caixaHudTopo = new Rectangle(380, 20, 430, 38);
+    private final Rectangle caixaHudTopo = new Rectangle(380, 18, 430, 42);
+    private final Rectangle cartaoProximaLetra = new Rectangle(388, 22, 34, 34);
 
     private final GlyphLayout layout = new GlyphLayout();
 
@@ -293,6 +294,14 @@ public class TelaJogo extends ScreenAdapter {
         sr.rect(caixaHudTopo.x, caixaHudTopo.y, caixaHudTopo.width, caixaHudTopo.height);
         RenderUtils.desenharBorda(sr, caixaHudTopo, 3, Constantes.COR_BORDA);
 
+        // Bloco/Cartão de Destaque da Próxima Letra (estilo o bloco de letra caindo)
+        LetraInfo proxLetra = gl.espiarProximaLetra();
+        sr.setColor(Constantes.COR_CARTAO_LETRA);
+        sr.rect(cartaoProximaLetra.x, cartaoProximaLetra.y, cartaoProximaLetra.width, cartaoProximaLetra.height);
+        Color corBordaCartaoProx = (proxLetra != null && game.getDificuldadeAtual() != Constantes.Dificuldade.DIFICIL)
+            ? proxLetra.getCor() : Constantes.COR_BORDA_CARTAO;
+        RenderUtils.desenharBorda(sr, cartaoProximaLetra, 2, corBordaCartaoProx);
+
         // Caixas das 12 palavras
         List<String> palavras = gp.getPalavras();
         for (int i = 0; i < palavras.size(); i++) {
@@ -350,22 +359,45 @@ public class TelaJogo extends ScreenAdapter {
             + "  |  ÚLTIMA: " + (ultimaFormada != null ? ultimaFormada : "---");
         fontPequena.draw(batch, txtSub, caixaStatus.x + 12, caixaStatus.y + 24);
 
-        // HUD Topo Direito (Dica da Próxima Letra baseada na Dificuldade)
+        // HUD Topo Direito com Letra em Destaque Visual
         LetraInfo prox = gl.espiarProximaLetra();
-        String proxStr;
         Constantes.Dificuldade dif = game.getDificuldadeAtual();
+
+        // 1. Letra destacada dentro do mini cartão
+        String charProx;
+        Color corProx;
         if (prox == null) {
-            proxStr = "-";
-        } else if (dif == Constantes.Dificuldade.FACIL) {
-            proxStr = Character.toUpperCase(prox.getLetra()) + " (col " + (prox.getPos() + 1) + ")";
-        } else if (dif == Constantes.Dificuldade.NORMAL) {
-            proxStr = String.valueOf(Character.toUpperCase(prox.getLetra()));
+            charProx = "-";
+            corProx = Color.GRAY;
+        } else if (dif == Constantes.Dificuldade.DIFICIL) {
+            charProx = "?";
+            corProx = Color.DARK_GRAY;
         } else {
-            proxStr = "?"; // No Difícil, mantém suspense da próxima letra
+            charProx = String.valueOf(Character.toUpperCase(prox.getLetra()));
+            corProx = prox.getCor();
         }
 
-        String hudTxt = "PRÓXIMA: " + proxStr + "   |   [P] PAUSA   [M] SOM   [R] REINICIAR";
-        RenderUtils.desenharTextoCentralizado(batch, fontPequena, hudTxt, caixaHudTopo, Constantes.COR_TEXTO);
+        RenderUtils.desenharTextoComBorda(
+            batch, fontPadrao, charProx,
+            corProx, Color.BLACK, 1,
+            cartaoProximaLetra.x + cartaoProximaLetra.width / 2f,
+            cartaoProximaLetra.y + cartaoProximaLetra.height / 2f
+        );
+
+        // 2. Rótulo "PRÓXIMA" e detalhe de coluna (no Fácil)
+        fontPequena.setColor(Constantes.COR_TEXTO);
+        String txtRotulo = "PRÓXIMA";
+        if (dif == Constantes.Dificuldade.FACIL && prox != null) {
+            txtRotulo = "PRÓXIMA (col " + (prox.getPos() + 1) + "):";
+        } else {
+            txtRotulo = "PRÓXIMA:";
+        }
+        fontPequena.draw(batch, txtRotulo, cartaoProximaLetra.x + cartaoProximaLetra.width + 8, caixaHudTopo.y + 14);
+
+        // 3. Atalhos do HUD alinhados à direita
+        String atalhosTxt = "[P] PAUSA  [M] SOM  [R] REINICIAR";
+        layout.setText(fontPequena, atalhosTxt);
+        fontPequena.draw(batch, atalhosTxt, caixaHudTopo.x + caixaHudTopo.width - layout.width - 12, caixaHudTopo.y + 14);
 
         // Palavras da lista
         for (int i = 0; i < palavras.size(); i++) {
