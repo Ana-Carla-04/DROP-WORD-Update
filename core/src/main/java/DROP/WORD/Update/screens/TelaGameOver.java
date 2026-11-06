@@ -1,48 +1,87 @@
 package DROP.WORD.Update.screens;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 import DROP.WORD.Update.Constantes;
 import DROP.WORD.Update.Main;
-import DROP.WORD.Update.entities.GerenciadorLetras;
+import DROP.WORD.Update.utils.GerenciadorArquivos;
+import DROP.WORD.Update.utils.RenderUtils;
 
 public class TelaGameOver extends ScreenAdapter {
     private final Main game;
     private final OrthographicCamera camera;
+    private final Viewport viewport;
+
+    private final String motivoDerrota;
+    private final int pontuacaoFinal;
+    private final float tempoSegundos;
+    private final int palavrasCompletadas;
+    private final int totalPalavras;
 
     private final Rectangle caixaPrincipal = new Rectangle(20, 20, Constantes.LARGURA_TELA - 40, Constantes.ALTURA_TELA - 40);
-    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 7f, 100, 600, 100);
-    private final Rectangle botaoMenu = new Rectangle(Constantes.LARGURA_TELA / 2f - 100, 400, 200, 60);
+    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 2f - 300, 48, 600, 82);
+    private final Rectangle caixaResumo = new Rectangle(Constantes.LARGURA_TELA / 2f - 300, 148, 600, 185);
+    private final Rectangle caixaInputNome = new Rectangle(Constantes.LARGURA_TELA / 2f - 220, 352, 440, 62);
+    private final Rectangle botaoMenu = new Rectangle(Constantes.LARGURA_TELA / 2f - 140, 435, 280, 62);
 
-    private final Color corFundoExterno = Color.valueOf("dfb0b0");
+    private final Color corFundoExterno = Constantes.COR_FUNDO;
     private final Color corFundoInterno = Color.valueOf("ef7b7b");
     private final Color corBordaInterna = Color.valueOf("ffffff");
     private final Color corTituloCaixa  = Color.valueOf("f4ddde");
     private final Color corTituloBorda  = Color.valueOf("b26969");
-
-    private final Color corBotao        = Color.valueOf("dfb0b0");
-    private final Color corBotaoBorda   = Color.valueOf("b26969");
-    private final Color corTextoBotao   = Color.valueOf("000000");
-
-    private final Color corBotaoHover      = Color.valueOf("b26969");
-    private final Color corBotaoBordaHover = Color.valueOf("f4ddde");
-    private final Color corTextoBotaoHover = Color.valueOf("f4ddde");
+    private final Color corCampoNome    = Color.valueOf("fff6f6");
 
     private final Vector3 mousePos = new Vector3();
     private final GlyphLayout layout = new GlyphLayout();
 
+    private StringBuilder bufferNome;
+    private boolean pontuacaoSalva = false;
+    private float tempoCursor = 0f;
+
     public TelaGameOver(Main game) {
+        this(game, "FIM DE JOGO!", 0, 0f, 0, Constantes.TOTAL_PALAVRAS_PARTIDA);
+    }
+
+    public TelaGameOver(Main game, String motivoDerrota, int pontuacaoFinal, float tempoSegundos, int palavrasCompletadas, int totalPalavras) {
         this.game = game;
+        this.motivoDerrota = motivoDerrota;
+        this.pontuacaoFinal = pontuacaoFinal;
+        this.tempoSegundos = tempoSegundos;
+        this.palavrasCompletadas = palavrasCompletadas;
+        this.totalPalavras = totalPalavras;
+        this.bufferNome = new StringBuilder(game.getNomeJogadorAtual());
+
         this.camera = new OrthographicCamera();
         this.camera.setToOrtho(true, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        this.viewport = new FitViewport(Constantes.LARGURA_TELA, Constantes.ALTURA_TELA, camera);
+    }
+
+    private void salvarEVoltarAoMenu() {
+        if (!pontuacaoSalva) {
+            String nomeFinal = GerenciadorArquivos.normalizarNome(bufferNome.toString());
+            game.setNomeJogadorAtual(nomeFinal);
+            GerenciadorArquivos.salvarPontuacao(
+                nomeFinal,
+                pontuacaoFinal,
+                tempoSegundos,
+                game.getDificuldadeAtual().getRotulo()
+            );
+            pontuacaoSalva = true;
+        }
+        game.setScreen(new TelaMenu(game));
     }
 
     @Override
@@ -51,10 +90,35 @@ public class TelaGameOver extends ScreenAdapter {
             @Override
             public boolean touchDown(int screenX, int screenY, int pointer, int button) {
                 mousePos.set(screenX, screenY, 0);
-                camera.unproject(mousePos);
+                viewport.unproject(mousePos);
 
                 if (botaoMenu.contains(mousePos.x, mousePos.y)) {
-                    game.setScreen(new TelaMenu(game));
+                    salvarEVoltarAoMenu();
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean keyDown(int keycode) {
+                if (keycode == Input.Keys.ENTER || keycode == Input.Keys.ESCAPE) {
+                    salvarEVoltarAoMenu();
+                    return true;
+                } else if (keycode == Input.Keys.BACKSPACE) {
+                    if (bufferNome.length() > 0) {
+                        bufferNome.deleteCharAt(bufferNome.length() - 1);
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean keyTyped(char character) {
+                if (Character.isLetterOrDigit(character) || character == ' ' || character == '_' || character == '-') {
+                    if (bufferNome.length() < 12) {
+                        bufferNome.append(Character.toUpperCase(character));
+                    }
                     return true;
                 }
                 return false;
@@ -63,81 +127,114 @@ public class TelaGameOver extends ScreenAdapter {
     }
 
     @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
+    }
+
+    @Override
     public void render(float delta) {
+        tempoCursor += delta;
+
         Gdx.gl.glClearColor(corFundoExterno.r, corFundoExterno.g, corFundoExterno.b, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         mousePos.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-        camera.unproject(mousePos);
+        viewport.unproject(mousePos);
         boolean estaSobreBotao = botaoMenu.contains(mousePos.x, mousePos.y);
 
         camera.update();
-        game.shapeRenderer.setProjectionMatrix(camera.combined);
-        game.batch.setProjectionMatrix(camera.combined);
+        ShapeRenderer sr = game.getShapeRenderer();
+        SpriteBatch batch = game.getBatch();
+        BitmapFont fontTitulo = game.getFontTitulo();
+        BitmapFont fontPadrao = game.getFontPadrao();
 
-        // 1. FORMAS PREENCHIDAS
-        game.shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        game.shapeRenderer.setColor(corFundoInterno);
-        game.shapeRenderer.rect(caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height);
+        sr.setProjectionMatrix(camera.combined);
+        batch.setProjectionMatrix(camera.combined);
 
-        game.shapeRenderer.setColor(corTituloCaixa);
-        game.shapeRenderer.rect(caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height);
+        // 1. FORMAS E BORDAS
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+        sr.setColor(corFundoInterno);
+        sr.rect(caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height);
+        RenderUtils.desenharBorda(sr, caixaPrincipal, 3, corBordaInterna);
 
-        game.shapeRenderer.setColor(estaSobreBotao ? corBotaoHover : corBotao);
-        game.shapeRenderer.rect(botaoMenu.x, botaoMenu.y, botaoMenu.width, botaoMenu.height);
+        sr.setColor(corTituloCaixa);
+        sr.rect(caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height);
+        RenderUtils.desenharBorda(sr, caixaTitulo, 3, corTituloBorda);
 
-        // 2. BORDAS RETAS
-        desenharBorda(game.shapeRenderer, caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height, 3, corBordaInterna);
-        desenharBorda(game.shapeRenderer, caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height, 3, corTituloBorda);
+        sr.setColor(corTituloCaixa);
+        sr.rect(caixaResumo.x, caixaResumo.y, caixaResumo.width, caixaResumo.height);
+        RenderUtils.desenharBorda(sr, caixaResumo, 3, corTituloBorda);
 
-        Color bordaMenu = estaSobreBotao ? corBotaoBordaHover : corBotaoBorda;
-        desenharBorda(game.shapeRenderer, botaoMenu.x, botaoMenu.y, botaoMenu.width, botaoMenu.height, 3, bordaMenu);
-        game.shapeRenderer.end();
+        sr.setColor(corCampoNome);
+        sr.rect(caixaInputNome.x, caixaInputNome.y, caixaInputNome.width, caixaInputNome.height);
+        RenderUtils.desenharBorda(sr, caixaInputNome, 3, corTituloBorda);
 
-        // 3. TEXTOS
-        game.batch.begin();
-        game.fontTitulo.getData().setScale(3.0f);
-        layout.setText(game.fontTitulo, "VOCÊ PERDEU");
+        RenderUtils.desenharCaixaBotao(sr, botaoMenu, estaSobreBotao, 3);
+        sr.end();
 
-        // Sombra de 3px
-        game.fontTitulo.setColor(corFundoInterno);
-        game.fontTitulo.draw(game.batch, "VOCÊ PERDEU",
+        // 2. TEXTOS
+        batch.begin();
+        fontTitulo.getData().setScale(2.7f);
+        layout.setText(fontTitulo, "VOCÊ PERDEU");
+
+        fontTitulo.setColor(corFundoInterno);
+        fontTitulo.draw(batch, "VOCÊ PERDEU",
             caixaTitulo.x + (caixaTitulo.width - layout.width) / 2f + 3,
             caixaTitulo.y + (caixaTitulo.height - layout.height) / 2f + 3);
 
-        // Texto principal
-        game.fontTitulo.setColor(Color.BLACK);
-        game.fontTitulo.draw(game.batch, "VOCÊ PERDEU",
+        fontTitulo.setColor(Color.BLACK);
+        fontTitulo.draw(batch, "VOCÊ PERDEU",
             caixaTitulo.x + (caixaTitulo.width - layout.width) / 2f,
             caixaTitulo.y + (caixaTitulo.height - layout.height) / 2f);
 
-        // Mensagens
-        game.fontPadrao.getData().setScale(2.0f);
-        game.fontPadrao.setColor(Color.BLACK);
+        // Motivo da Derrota e Estatísticas
+        fontPadrao.getData().setScale(1.3f);
+        fontPadrao.setColor(Color.valueOf("901a1a"));
+        layout.setText(fontPadrao, motivoDerrota);
+        fontPadrao.draw(batch, motivoDerrota,
+            caixaResumo.x + (caixaResumo.width - layout.width) / 2f,
+            caixaResumo.y + 18);
 
-        layout.setText(game.fontPadrao, "VOLTE AO MENU E  ");
-        game.fontPadrao.draw(game.batch, "VOLTE AO MENU E  ", Constantes.LARGURA_TELA / 2f - layout.width / 2f, 250);
+        fontPadrao.getData().setScale(1.4f);
+        fontPadrao.setColor(Color.BLACK);
 
-        layout.setText(game.fontPadrao, "TENTE NOVAMENTE!");
-        game.fontPadrao.draw(game.batch, "TENTE NOVAMENTE!", Constantes.LARGURA_TELA / 2f - layout.width / 2f - 5, 320);
+        int recorde = Math.max(GerenciadorArquivos.obterRecorde(), pontuacaoFinal);
+        String linhaPts = "PONTUAÇÃO FINAL: " + pontuacaoFinal + " PTS  (RECORDE: " + recorde + " PTS)";
+        layout.setText(fontPadrao, linhaPts);
+        fontPadrao.draw(batch, linhaPts, caixaResumo.x + (caixaResumo.width - layout.width) / 2f, caixaResumo.y + 62);
 
-        // Botão MENU
-        game.fontPadrao.getData().setScale(1.8f);
-        String txtMenu = "MENU";
-        layout.setText(game.fontPadrao, txtMenu);
-        game.fontPadrao.setColor(estaSobreBotao ? corTextoBotaoHover : corTextoBotao);
-        game.fontPadrao.draw(game.batch, txtMenu,
-            botaoMenu.x + (botaoMenu.width - layout.width) / 2f,
-            botaoMenu.y + (botaoMenu.height - layout.height) / 2f);
+        String linhaPal = String.format("PALAVRAS COMPLETADAS: %d / %d", palavrasCompletadas, totalPalavras);
+        layout.setText(fontPadrao, linhaPal);
+        fontPadrao.draw(batch, linhaPal, caixaResumo.x + (caixaResumo.width - layout.width) / 2f, caixaResumo.y + 104);
 
-        game.batch.end();
-    }
+        String linhaTempo = String.format("TEMPO DE JOGO: %02d:%02d  |  NÍVEL: %s",
+            (int) (tempoSegundos / 60), (int) (tempoSegundos % 60), game.getDificuldadeAtual().getRotulo());
+        layout.setText(fontPadrao, linhaTempo);
+        fontPadrao.draw(batch, linhaTempo, caixaResumo.x + (caixaResumo.width - layout.width) / 2f, caixaResumo.y + 144);
 
-    private void desenharBorda(ShapeRenderer shape, float x, float y, float w, float h, float espessura, Color cor) {
-        shape.setColor(cor);
-        shape.rect(x, y, w, espessura);
-        shape.rect(x, y + h - espessura, w, espessura);
-        shape.rect(x, y, espessura, h);
-        shape.rect(x + w - espessura, y, espessura, h);
+        // Caixa de Nome para o Ranking
+        fontPadrao.getData().setScale(1.05f);
+        fontPadrao.setColor(corTituloBorda);
+        String labelInput = "DIGITE SEU NOME PARA O RANKING:";
+        layout.setText(fontPadrao, labelInput);
+        fontPadrao.draw(batch, labelInput,
+            caixaInputNome.x + (caixaInputNome.width - layout.width) / 2f,
+            caixaInputNome.y + 8);
+
+        fontPadrao.getData().setScale(1.55f);
+        fontPadrao.setColor(Color.BLACK);
+        String cursor = ((int) (tempoCursor * 2) % 2 == 0) ? "_" : "";
+        String txtNome = bufferNome.toString() + cursor;
+        layout.setText(fontPadrao, txtNome);
+        fontPadrao.draw(batch, txtNome,
+            caixaInputNome.x + (caixaInputNome.width - layout.width) / 2f,
+            caixaInputNome.y + 30);
+
+        // Botão Salvar e Voltar ao Menu
+        fontPadrao.getData().setScale(1.55f);
+        RenderUtils.desenharTextoCentralizado(batch, fontPadrao, "SALVAR E MENU [ENTER]", botaoMenu,
+            estaSobreBotao ? Constantes.COR_BOTAO_TEXTO_HOVER : Constantes.COR_BOTAO_TEXTO);
+
+        batch.end();
     }
 }

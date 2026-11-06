@@ -7,43 +7,65 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 import DROP.WORD.Update.Constantes;
 import DROP.WORD.Update.Main;
 import DROP.WORD.Update.entities.GerenciadorLetras;
 import DROP.WORD.Update.entities.GerenciadorPalavras;
+import DROP.WORD.Update.entities.LetraInfo;
+import DROP.WORD.Update.utils.DesfoqueFundo;
+import DROP.WORD.Update.utils.RenderUtils;
 
 import java.util.List;
 
 public class TelaJogo extends ScreenAdapter {
     private final Main game;
     private final OrthographicCamera camera;
+    private final Viewport viewport;
 
     private GerenciadorPalavras gp;
     private GerenciadorLetras gl;
     private final List<String> palavrasIniciais;
 
     private final int xAreaJogo = 380;
-    private final int yAreaJogo = 30;
+    private final int yAreaJogo = 65;
     private final int larguraAreaJogo = 430;
-    private final int alturaAreaJogo = 540;
+    private final int alturaAreaJogo = 505;
+
+    private final Rectangle caixaCabecalho = new Rectangle(18, 20, 330, 62);
+    private final Rectangle caixaStatus = new Rectangle(18, 90, 330, 50);
+    private final Rectangle caixaHudTopo = new Rectangle(380, 20, 430, 38);
 
     private final GlyphLayout layout = new GlyphLayout();
+
+    private boolean jogoPausadoManual = false;
+    private DesfoqueFundo desfoque;
+    private float tempoDecorridoSegundos = 0f;
+    private int pontuacaoPalavras = 0;
 
     public TelaJogo(Main game, List<String> palavras) {
         this.game = game;
         this.palavrasIniciais = palavras;
         this.camera = new OrthographicCamera();
         this.camera.setToOrtho(true, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        this.viewport = new FitViewport(Constantes.LARGURA_TELA, Constantes.ALTURA_TELA, camera);
 
         iniciarJogo(palavras);
     }
 
     private void iniciarJogo(List<String> palavras) {
-        this.gp = new GerenciadorPalavras(palavras);
-        this.gl = new GerenciadorLetras(xAreaJogo, yAreaJogo, larguraAreaJogo, alturaAreaJogo, gp);
+        this.gp = new GerenciadorPalavras(palavras, game.getDicionarioOrdenado());
+        float velBase = game.getDificuldadeAtual().getVelocidadeBase();
+        this.gl = new GerenciadorLetras(xAreaJogo, yAreaJogo, larguraAreaJogo, alturaAreaJogo, gp, velBase);
+        this.jogoPausadoManual = false;
+        this.tempoDecorridoSegundos = 0f;
+        this.pontuacaoPalavras = 0;
     }
 
     @Override
@@ -54,19 +76,28 @@ public class TelaJogo extends ScreenAdapter {
                 if (keycode == Input.Keys.ESCAPE) {
                     game.setScreen(new TelaMenu(game));
                     return true;
-                } else if (keycode == Input.Keys.LEFT && !gl.pausado) {
-                    gl.moverLetraEsquerda();
+                } else if (keycode == Input.Keys.P) {
+                    jogoPausadoManual = !jogoPausadoManual;
                     return true;
-                } else if (keycode == Input.Keys.RIGHT && !gl.pausado) {
-                    gl.moverLetraDireita();
-                    return true;
-                } else if (keycode == Input.Keys.DOWN) {
-                    if (gl.atual != null && !gl.pausado) {
-                        gl.atual.y += 20;
-                    }
+                } else if (keycode == Input.Keys.M) {
+                    game.alternarAudio();
                     return true;
                 } else if (keycode == Input.Keys.R) {
                     iniciarJogo(palavrasIniciais);
+                    return true;
+                }
+
+                if (jogoPausadoManual || gl.isPausadoPorPalavra()) {
+                    return false;
+                }
+
+                if (keycode == Input.Keys.LEFT || keycode == Input.Keys.A) {
+                    gl.moverLetraEsquerda();
+                    game.tocarSomMover();
+                    return true;
+                } else if (keycode == Input.Keys.RIGHT || keycode == Input.Keys.D) {
+                    gl.moverLetraDireita();
+                    game.tocarSomMover();
                     return true;
                 }
                 return false;
@@ -74,151 +105,297 @@ public class TelaJogo extends ScreenAdapter {
         });
     }
 
+    @Override
+    public void pause() {
+        // Pausa automática ao minimizar ou perder foco
+        this.jogoPausadoManual = true;
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height, true);
+    }
+
+    public int calcularPontuacaoTotal() {
+        int mult = game.getDificuldadeAtual().getMultiplicadorPontos();
+        int ptsLetras = gl.getLetrasCorretasPosicionadas() * Constantes.PONTOS_LETRA_CORRETA * mult;
+        return pontuacaoPalavras + ptsLetras;
+    }
+
     public boolean verificarDerrota() {
-        if (gl == null) return false;
-        boolean col0 = false;
-        for (int c = 0; c < Constantes.GRID_COLS; c++) {
-            if (gl.grid[0][c] != null) { col0 = true; break; }
-        }
-        return col0 || gl.colInvalida;
+        return gl != null && gl.verificarDerrota();
     }
 
     public boolean verificarVitoria() {
-        if (gp == null) return false;
-        for (boolean b : gp.completadas.values()) {
-            if (!b) return false;
-        }
-        return true;
+        return gp != null && gp.todasCompletadas();
     }
 
     public void verificarPalavrasFormadas() {
         List<Character> letras = gl.getLetrasLinhaInferior();
         if (letras.size() == Constantes.GRID_COLS) {
-            String formata = gp.verificarPalavraFormada(letras);
-            if (formata != null) {
-                gp.marcarPalavraCompleta(formata);
-                gl.pausarPorPalavra(formata);
+            String formada = gp.verificarPalavraFormada(letras);
+            if (formada != null) {
+                boolean eraPalavraAlvo = gp.registrarPalavraFormada(formada);
+                int mult = game.getDificuldadeAtual().getMultiplicadorPontos();
+                if (eraPalavraAlvo) {
+                    pontuacaoPalavras += Constantes.PONTOS_PALAVRA_ALVO * mult;
+                } else {
+                    pontuacaoPalavras += Constantes.PONTOS_PALAVRA_BONUS_DICIONARIO * mult;
+                }
+                gl.pausarPorPalavra(formada);
                 gl.removerLinhaInferior();
+                game.tocarSomPalavra();
             } else {
-                gl.ultimaLinhaValida--;
+                gl.avancarLinhaInvalida();
+                game.tocarSomPouso();
             }
+        }
+    }
+
+    public void update(float delta) {
+        if (jogoPausadoManual) {
+            return;
+        }
+
+        tempoDecorridoSegundos += delta;
+
+        boolean segurandoBaixo = Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S);
+        gl.update(delta, segurandoBaixo);
+
+        if (!gl.isPausadoPorPalavra()) {
+            verificarPalavrasFormadas();
+        }
+
+        if (verificarDerrota()) {
+            int ptsFinal = calcularPontuacaoTotal();
+            game.setScreen(new TelaFimDeJogo(
+                game,
+                false,
+                gl.getMotivoDerrota(),
+                ptsFinal,
+                tempoDecorridoSegundos,
+                gp.getQuantidadeCompletadas(),
+                gp.getPalavras().size(),
+                palavrasIniciais
+            ));
+        } else if (verificarVitoria()) {
+            int ptsFinal = calcularPontuacaoTotal();
+            game.setScreen(new TelaFimDeJogo(
+                game,
+                true,
+                null,
+                ptsFinal,
+                tempoDecorridoSegundos,
+                gp.getQuantidadeCompletadas(),
+                gp.getPalavras().size(),
+                palavrasIniciais
+            ));
         }
     }
 
     @Override
     public void render(float delta) {
-        gl.update(delta);
-        if (!gl.pausado) {
-            verificarPalavrasFormadas();
+        update(delta);
+
+        if (game.getScreen() != this) {
+            return;
         }
 
-        if (verificarDerrota()) {
-            game.setScreen(new TelaGameOver(game));
-            return;
-        } else if (verificarVitoria()) {
-            game.setScreen(new TelaVitoria(game));
-            return;
+        camera.update();
+
+        if (jogoPausadoManual) {
+            desenharPausa();
+        } else {
+            if (desfoque != null) {
+                desfoque.descartar();
+            }
+            desenharCena();
+        }
+    }
+
+    private void desenharPausa() {
+        SpriteBatch batch = game.getBatch();
+
+        if (desfoque == null) {
+            desfoque = new DesfoqueFundo(Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        }
+        if (!desfoque.temImagem()) {
+            desfoque.capturar(batch, this::desenharCena);
+            viewport.apply();
         }
 
         Gdx.gl.glClearColor(Constantes.COR_FUNDO.r, Constantes.COR_FUNDO.g, Constantes.COR_FUNDO.b, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        camera.update();
-        game.shapeRenderer.setProjectionMatrix(camera.combined);
-        game.batch.setProjectionMatrix(camera.combined);
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        desfoque.desenhar(batch, 0, 0, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
 
-        game.shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        game.shapeRenderer.setColor(Constantes.COR_CABECALHO);
-        game.shapeRenderer.rect(18, 30, 330, 90);
+        BitmapFont fontTitulo = game.getFontTitulo();
+        BitmapFont fontPadrao = game.getFontPadrao();
+        float cx = Constantes.LARGURA_TELA / 2f;
+        float cy = Constantes.ALTURA_TELA / 2f;
+
+        RenderUtils.desenharTextoComBorda(batch, fontTitulo, "PAUSADO",
+            Color.WHITE, Color.BLACK, 2, cx, cy - 20);
+
+        RenderUtils.desenharTextoComBorda(batch, fontPadrao, "[P] CONTINUAR    [R] REINICIAR    [ESC] MENU",
+            Color.WHITE, Color.BLACK, 1, cx, cy + 40);
+
+        batch.end();
+    }
+
+    @Override
+    public void hide() {
+        if (desfoque != null) {
+            desfoque.dispose();
+            desfoque = null;
+        }
+    }
+
+    private void desenharCena() {
+        Gdx.gl.glClearColor(Constantes.COR_FUNDO.r, Constantes.COR_FUNDO.g, Constantes.COR_FUNDO.b, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        ShapeRenderer sr = game.getShapeRenderer();
+        SpriteBatch batch = game.getBatch();
+        BitmapFont fontTitulo = game.getFontTitulo();
+        BitmapFont fontPadrao = game.getFontPadrao();
+        BitmapFont fontLetras = game.getFontLetras();
+        BitmapFont fontPequena = game.getFontPequena();
+
+        sr.setProjectionMatrix(camera.combined);
+        batch.setProjectionMatrix(camera.combined);
 
         int numCols = 2;
         int larguraColuna = 120;
         int espacamento = 40;
         int larguraTotal = numCols * (larguraColuna + 5) + (numCols - 1) * espacamento;
         int xBase = (Constantes.LARGURA_TELA - (2 * larguraTotal)) / 8;
-        int yBase = 150;
+        int yBase = 152;
+        int espacamentoLinhas = 68;
 
-        for (int i = 0; i < gp.palavras.size(); i++) {
-            String p = gp.palavras.get(i);
+        // Descobre a palavra dona da letra atual para destaque
+        int idxPalavraDona = (gl.getAtual() != null) ? gl.getAtual().getPalavraOrigem() : -1;
+
+        sr.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Cabeçalho e Status
+        sr.setColor(Constantes.COR_CABECALHO);
+        sr.rect(caixaCabecalho.x, caixaCabecalho.y, caixaCabecalho.width, caixaCabecalho.height);
+        RenderUtils.desenharBorda(sr, caixaCabecalho, 4, Constantes.COR_BORDA);
+
+        sr.setColor(Constantes.COR_CABECALHO);
+        sr.rect(caixaStatus.x, caixaStatus.y, caixaStatus.width, caixaStatus.height);
+        RenderUtils.desenharBorda(sr, caixaStatus, 3, Constantes.COR_BORDA);
+
+        sr.setColor(Constantes.COR_CABECALHO);
+        sr.rect(caixaHudTopo.x, caixaHudTopo.y, caixaHudTopo.width, caixaHudTopo.height);
+        RenderUtils.desenharBorda(sr, caixaHudTopo, 3, Constantes.COR_BORDA);
+
+        // Caixas das 12 palavras
+        List<String> palavras = gp.getPalavras();
+        for (int i = 0; i < palavras.size(); i++) {
+            String p = palavras.get(i);
             int col = i % numCols;
             int lin = i / numCols;
             int px = xBase + col * (larguraColuna + espacamento + 5);
-            int py = yBase + lin * 70;
+            int py = yBase + lin * espacamentoLinhas;
 
-            Color corFundo = gp.completadas.get(p) ? Constantes.COR_PALAVRA_COMPLETA : Constantes.COR_CABECALHO;
-            game.shapeRenderer.setColor(corFundo);
-            game.shapeRenderer.rect(px, py, larguraColuna + 20, 45);
+            boolean ehDona = (i == idxPalavraDona && !gp.isPalavraCompletada(p));
+            Color corFundo = gp.isPalavraCompletada(p) ? Constantes.COR_PALAVRA_COMPLETA : (ehDona ? Color.valueOf("fff1f1") : Constantes.COR_CABECALHO);
+            sr.setColor(corFundo);
+            sr.rect(px, py, larguraColuna + 20, 44);
+
+            // Se for a palavra dona da letra caindo, desenha borda mais espessa e vibrante
+            Color bordaCor = ehDona ? gp.getCorPalavra(p) : Constantes.COR_BORDA;
+            RenderUtils.desenharBorda(sr, px, py, larguraColuna + 20, 44, ehDona ? 4 : 3, bordaCor);
         }
 
-        game.shapeRenderer.setColor(Constantes.COR_CABECALHO);
-        game.shapeRenderer.rect(xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4);
+        // Fundo e bordas da grade
+        sr.setColor(Constantes.COR_CABECALHO);
+        sr.rect(xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4);
 
-        gl.desenharGradeVazia(game.shapeRenderer);
-        gl.desenharBlocosDeLetras(game.shapeRenderer);
+        gl.desenharGradeVazia(sr);
+        gl.desenharPreviaQueda(sr); // Prévia de queda destacando a célula de destino!
+        gl.desenharBlocosDeLetras(sr);
 
-        desenharBorda(game.shapeRenderer, 18, 30, 330, 90, 4, Constantes.COR_BORDA);
-
-        for (int i = 0; i < gp.palavras.size(); i++) {
-            int col = i % numCols;
-            int lin = i / numCols;
-            int px = xBase + col * (larguraColuna + espacamento + 5);
-            int py = yBase + lin * 70;
-            desenharBorda(game.shapeRenderer, px, py, larguraColuna + 20, 45, 3, Constantes.COR_BORDA);
-        }
-
-        desenharBorda(game.shapeRenderer, xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4, 3, Constantes.COR_BORDA);
+        RenderUtils.desenharBorda(sr, xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4, 3, Constantes.COR_BORDA);
 
         int lq = larguraAreaJogo / Constantes.GRID_COLS;
         int hq = alturaAreaJogo / Constantes.GRID_ROWS;
         for (int col = 0; col < Constantes.GRID_COLS; col++) {
             for (int lin = 0; lin < Constantes.GRID_ROWS; lin++) {
-                desenharBorda(game.shapeRenderer, xAreaJogo + col * lq, yAreaJogo + lin * hq, lq, hq, 1, Constantes.COR_BORDA);
+                RenderUtils.desenharBorda(sr, xAreaJogo + col * lq, yAreaJogo + lin * hq, lq, hq, 1, Constantes.COR_BORDA);
             }
         }
 
-        game.shapeRenderer.end();
+        sr.end();
 
-        game.batch.begin();
+        batch.begin();
 
         // Título "WORD DROP"
-        game.fontTitulo.getData().setScale(2.1f);
-        game.fontTitulo.setColor(Constantes.COR_TEXTO);
-        layout.setText(game.fontTitulo, "WORD DROP");
-        game.fontTitulo.draw(game.batch, "WORD DROP",
-            18 + (330 - layout.width) / 2f,
-            30 + (90 - layout.height) / 2f);
+        RenderUtils.desenharTextoCentralizado(batch, fontTitulo, "WORD DROP", caixaCabecalho, Constantes.COR_TEXTO);
 
-        // Palavras da lista com contorno branco usando a nova função estática
-        game.fontPadrao.getData().setScale(1.6f);
-        for (int i = 0; i < gp.palavras.size(); i++) {
-            String p = gp.palavras.get(i);
+        // Status Esquerdo (Pontuação, Tempo, Jogador)
+        fontPequena.setColor(Constantes.COR_TEXTO);
+        String txtPontos = String.format("PONTOS: %d   |   TEMPO: %02d:%02d",
+            calcularPontuacaoTotal(),
+            (int) (tempoDecorridoSegundos / 60),
+            (int) (tempoDecorridoSegundos % 60));
+        fontPequena.draw(batch, txtPontos, caixaStatus.x + 12, caixaStatus.y + 6);
+
+        String ultimaFormada = gp.getHistoricoPalavrasFormadas().topo();
+        String txtSub = "JOGADOR: " + game.getNomeJogadorAtual()
+            + "  |  ÚLTIMA: " + (ultimaFormada != null ? ultimaFormada : "---");
+        fontPequena.draw(batch, txtSub, caixaStatus.x + 12, caixaStatus.y + 24);
+
+        // HUD Topo Direito (Dica da Próxima Letra baseada na Dificuldade)
+        LetraInfo prox = gl.espiarProximaLetra();
+        String proxStr;
+        Constantes.Dificuldade dif = game.getDificuldadeAtual();
+        if (prox == null) {
+            proxStr = "-";
+        } else if (dif == Constantes.Dificuldade.FACIL) {
+            proxStr = Character.toUpperCase(prox.getLetra()) + " (col " + (prox.getPos() + 1) + ")";
+        } else if (dif == Constantes.Dificuldade.NORMAL) {
+            proxStr = String.valueOf(Character.toUpperCase(prox.getLetra()));
+        } else {
+            proxStr = "?"; // No Difícil, mantém suspense da próxima letra
+        }
+
+        String hudTxt = "PRÓXIMA: " + proxStr + "   |   [P] PAUSA   [M] SOM   [R] REINICIAR";
+        RenderUtils.desenharTextoCentralizado(batch, fontPequena, hudTxt, caixaHudTopo, Constantes.COR_TEXTO);
+
+        // Palavras da lista
+        for (int i = 0; i < palavras.size(); i++) {
+            String p = palavras.get(i);
             int col = i % numCols;
             int lin = i / numCols;
             int px = xBase + col * (larguraColuna + espacamento + 5);
-            int py = yBase + lin * 70;
+            int py = yBase + lin * espacamentoLinhas;
 
-            Color corTexto = gp.completadas.get(p) ? Constantes.COR_TEXTO : gp.corPalavras.get(p);
-            Rectangle rect = new Rectangle(px, py, larguraColuna + 20, 45);
-
-            GerenciadorLetras.desenharTextoComBordaGrossa(
-                game.batch, game.fontPadrao, p.toUpperCase(),
-                corTexto, Color.WHITE, 1,
-                rect.x + rect.width / 2f, rect.y + rect.height / 2f
+            Color corTexto = gp.isPalavraCompletada(p) ? Constantes.COR_TEXTO : gp.getCorPalavra(p);
+            RenderUtils.desenharTextoComBorda(
+                batch, fontPadrao, p.toUpperCase(),
+                corTexto, Color.BLACK, 1,
+                px + (larguraColuna + 20) / 2f, py + 44 / 2f
             );
         }
 
-        // Aumentando um pouquinho a fonte das letras do grid para ficar imponente igual a imagem
-        game.fontLetras.getData().setScale(2.5f);
-        gl.desenharTextos(game.batch, game.fontLetras);
+        // Letras da grade
+        gl.desenharTextos(batch, fontLetras);
 
-        game.batch.end();
-    }
+        // Mensagem de palavra formada em pausa de comemoração
+        if (gl.isPausadoPorPalavra() && gl.getPalavraEmPausa() != null) {
+            String msg = "PALAVRA: " + gl.getPalavraEmPausa().toUpperCase() + "!";
+            RenderUtils.desenharTextoComBorda(
+                batch, fontTitulo, msg,
+                Constantes.COR_PALAVRA_COMPLETA, Color.BLACK, 2,
+                xAreaJogo + larguraAreaJogo / 2f, yAreaJogo + alturaAreaJogo / 2f
+            );
+        }
 
-    private void desenharBorda(ShapeRenderer shape, float x, float y, float w, float h, float espessura, Color cor) {
-        shape.setColor(cor);
-        shape.rect(x, y, w, espessura);
-        shape.rect(x, y + h - espessura, w, espessura);
-        shape.rect(x, y, espessura, h);
-        shape.rect(x + w - espessura, y, espessura, h);
+        batch.end();
     }
 }
