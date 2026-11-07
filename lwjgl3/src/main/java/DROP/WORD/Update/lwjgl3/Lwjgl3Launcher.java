@@ -17,7 +17,7 @@ public class Lwjgl3Launcher {
         config.setForegroundFPS(Constantes.FPS);
 
         // Se você não tiver os ícones na pasta assets, deixe esta linha comentada:
-        // config.setWindowIcon("libgdx128.png", "libgdx64.png", "libgdx32.png", "libgdx16.png");
+        config.setWindowIcon("iconWordDrop.png");
 
         new Lwjgl3Application(new Main(), config);
     }
