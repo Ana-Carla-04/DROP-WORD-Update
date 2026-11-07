@@ -15,6 +15,7 @@ import DROP.WORD.Update.Main;
 import DROP.WORD.Update.entities.GerenciadorLetras;
 import DROP.WORD.Update.entities.GerenciadorPalavras;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class TelaJogo extends ScreenAdapter {
@@ -36,14 +37,17 @@ public class TelaJogo extends ScreenAdapter {
         this.game = game;
         this.palavrasIniciais = palavras;
         this.camera = new OrthographicCamera();
-        this.camera.setToOrtho(true, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        this.camera.setToOrtho(false, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
 
         iniciarJogo(palavras);
     }
 
     private void iniciarJogo(List<String> palavras) {
         this.gp = new GerenciadorPalavras(palavras);
-        this.gl = new GerenciadorLetras(xAreaJogo, yAreaJogo, larguraAreaJogo, alturaAreaJogo, gp);
+        // A área do jogo começa em Y=30 no Pygame (que é o topo).
+        // No LibGDX, o topo é ALTURA - y - altura
+        int yAreaJogoLibGDX = Constantes.ALTURA_TELA - yAreaJogo - alturaAreaJogo;
+        this.gl = new GerenciadorLetras(xAreaJogo, yAreaJogoLibGDX, larguraAreaJogo, alturaAreaJogo, gp);
     }
 
     @Override
@@ -62,7 +66,7 @@ public class TelaJogo extends ScreenAdapter {
                     return true;
                 } else if (keycode == Input.Keys.DOWN) {
                     if (gl.atual != null && !gl.pausado) {
-                        gl.atual.y += 20;
+                        gl.atual.y -= 20; // No LibGDX, subtrai para descer
                     }
                     return true;
                 } else if (keycode == Input.Keys.R) {
@@ -76,11 +80,12 @@ public class TelaJogo extends ScreenAdapter {
 
     public boolean verificarDerrota() {
         if (gl == null) return false;
-        boolean col0 = false;
+        // A derrota é a linha de CIMA (topo)
+        int linhaDerrota = 0;
         for (int c = 0; c < Constantes.GRID_COLS; c++) {
-            if (gl.grid[0][c] != null) { col0 = true; break; }
+            if (gl.grid[linhaDerrota][c] != null) return true;
         }
-        return col0 || gl.colInvalida;
+        return gl.colInvalida;
     }
 
     public boolean verificarVitoria() {
@@ -92,15 +97,32 @@ public class TelaJogo extends ScreenAdapter {
     }
 
     public void verificarPalavrasFormadas() {
-        List<Character> letras = gl.getLetrasLinhaInferior();
+        int linhaFundo = Constantes.GRID_ROWS - 1;
+        List<Character> letras = new ArrayList<>();
+        for (int c = 0; c < Constantes.GRID_COLS; c++) {
+            if (gl.grid[linhaFundo][c] == null) return;
+            letras.add(gl.grid[linhaFundo][c]);
+        }
+
         if (letras.size() == Constantes.GRID_COLS) {
             String formata = gp.verificarPalavraFormada(letras);
             if (formata != null) {
                 gp.marcarPalavraCompleta(formata);
                 gl.pausarPorPalavra(formata);
-                gl.removerLinhaInferior();
+                // Remove a linha do fundo
+                for (int r = Constantes.GRID_ROWS - 1; r > 0; r--) {
+                    for (int c = 0; c < Constantes.GRID_COLS; c++) {
+                        gl.grid[r][c] = gl.grid[r - 1][c];
+                        gl.gridCores[r][c] = gl.gridCores[r - 1][c];
+                    }
+                }
+                // Limpa a linha de cima
+                for (int c = 0; c < Constantes.GRID_COLS; c++) {
+                    gl.grid[0][c] = null;
+                    gl.gridCores[0][c] = null;
+                }
             } else {
-                gl.ultimaLinhaValida--;
+                gl.ultimaLinhaValida--; // A linha do fundo sobe
             }
         }
     }
@@ -129,7 +151,10 @@ public class TelaJogo extends ScreenAdapter {
 
         game.shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         game.shapeRenderer.setColor(Constantes.COR_CABECALHO);
-        game.shapeRenderer.rect(18, 30, 330, 90);
+
+        // Cabeçalho (Pygame: y=30, h=90). LibGDX: ALTURA - 30 - 90
+        float yCabecalho = Constantes.ALTURA_TELA - 30 - 90;
+        game.shapeRenderer.rect(18, yCabecalho, 330, 90);
 
         int numCols = 2;
         int larguraColuna = 120;
@@ -138,6 +163,7 @@ public class TelaJogo extends ScreenAdapter {
         int xBase = (Constantes.LARGURA_TELA - (2 * larguraTotal)) / 8;
         int yBase = 150;
 
+        // Lista de palavras (Y invertido)
         for (int i = 0; i < gp.palavras.size(); i++) {
             String p = gp.palavras.get(i);
             int col = i % numCols;
@@ -147,68 +173,62 @@ public class TelaJogo extends ScreenAdapter {
 
             Color corFundo = gp.completadas.get(p) ? Constantes.COR_PALAVRA_COMPLETA : Constantes.COR_CABECALHO;
             game.shapeRenderer.setColor(corFundo);
-            game.shapeRenderer.rect(px, py, larguraColuna + 20, 45);
+
+            float pyLibGDX = Constantes.ALTURA_TELA - py - 45;
+            game.shapeRenderer.rect(px, pyLibGDX, larguraColuna + 20, 45);
         }
 
+        // Fundo da área do grid (Y invertido)
+        float yAreaJogoLibGDX = Constantes.ALTURA_TELA - yAreaJogo - alturaAreaJogo;
         game.shapeRenderer.setColor(Constantes.COR_CABECALHO);
-        game.shapeRenderer.rect(xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4);
+        game.shapeRenderer.rect(xAreaJogo - 2, yAreaJogoLibGDX - 2, larguraAreaJogo + 4, alturaAreaJogo + 4);
 
         gl.desenharGradeVazia(game.shapeRenderer);
         gl.desenharBlocosDeLetras(game.shapeRenderer);
 
-        desenharBorda(game.shapeRenderer, 18, 30, 330, 90, 4, Constantes.COR_BORDA);
+        desenharBorda(game.shapeRenderer, 18, yCabecalho, 330, 90, 4, Constantes.COR_BORDA);
 
         for (int i = 0; i < gp.palavras.size(); i++) {
             int col = i % numCols;
             int lin = i / numCols;
             int px = xBase + col * (larguraColuna + espacamento + 5);
             int py = yBase + lin * 70;
-            desenharBorda(game.shapeRenderer, px, py, larguraColuna + 20, 45, 3, Constantes.COR_BORDA);
+            float pyLibGDX = Constantes.ALTURA_TELA - py - 45;
+            desenharBorda(game.shapeRenderer, px, pyLibGDX, larguraColuna + 20, 45, 3, Constantes.COR_BORDA);
         }
 
-        desenharBorda(game.shapeRenderer, xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4, 3, Constantes.COR_BORDA);
-
-        int lq = larguraAreaJogo / Constantes.GRID_COLS;
-        int hq = alturaAreaJogo / Constantes.GRID_ROWS;
-        for (int col = 0; col < Constantes.GRID_COLS; col++) {
-            for (int lin = 0; lin < Constantes.GRID_ROWS; lin++) {
-                desenharBorda(game.shapeRenderer, xAreaJogo + col * lq, yAreaJogo + lin * hq, lq, hq, 1, Constantes.COR_BORDA);
-            }
-        }
+        desenharBorda(game.shapeRenderer, xAreaJogo - 2, yAreaJogoLibGDX - 2, larguraAreaJogo + 4, alturaAreaJogo + 4, 3, Constantes.COR_BORDA);
 
         game.shapeRenderer.end();
-
         game.batch.begin();
 
         // Título "WORD DROP"
-        game.fontTitulo.getData().setScale(2.1f);
         game.fontTitulo.setColor(Constantes.COR_TEXTO);
         layout.setText(game.fontTitulo, "WORD DROP");
         game.fontTitulo.draw(game.batch, "WORD DROP",
             18 + (330 - layout.width) / 2f,
-            30 + (90 - layout.height) / 2f);
+            yCabecalho + (90 + layout.height) / 2f);
 
-        // Palavras da lista com contorno branco usando a nova função estática
-        game.fontPadrao.getData().setScale(1.6f);
+        // Palavras da lista
         for (int i = 0; i < gp.palavras.size(); i++) {
             String p = gp.palavras.get(i);
             int col = i % numCols;
             int lin = i / numCols;
             int px = xBase + col * (larguraColuna + espacamento + 5);
             int py = yBase + lin * 70;
+            float pyLibGDX = Constantes.ALTURA_TELA - py - 45;
 
             Color corTexto = gp.completadas.get(p) ? Constantes.COR_TEXTO : gp.corPalavras.get(p);
-            Rectangle rect = new Rectangle(px, py, larguraColuna + 20, 45);
+            game.fontPalavrasLista.setColor(corTexto);
 
-            GerenciadorLetras.desenharTextoComBordaGrossa(
-                game.batch, game.fontPadrao, p.toUpperCase(),
-                corTexto, Color.WHITE, 1,
-                rect.x + rect.width / 2f, rect.y + rect.height / 2f
-            );
+            layout.setText(game.fontPalavrasLista, p.toUpperCase());
+            float textX = px + ((larguraColuna + 20) - layout.width) / 2f;
+            float textY = pyLibGDX + (45 + layout.height) / 2f;
+
+            game.fontPalavrasLista.draw(game.batch, p.toUpperCase(), textX, textY);
         }
 
-        // Aumentando um pouquinho a fonte das letras do grid para ficar imponente igual a imagem
-        game.fontLetras.getData().setScale(2.5f);
+        // Letras do grid
         gl.desenharTextos(game.batch, game.fontLetras);
 
         game.batch.end();

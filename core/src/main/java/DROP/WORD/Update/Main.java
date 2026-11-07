@@ -1,7 +1,8 @@
 package DROP.WORD.Update;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Game;
-import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -13,21 +14,24 @@ public class Main extends Game {
     public BitmapFont fontPadrao;
     public BitmapFont fontTitulo;
     public BitmapFont fontLetras;
+    public BitmapFont fontPalavrasLista;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
         shapeRenderer = new ShapeRenderer();
 
-        // Cria as fontes Bitmap nativas com o eixo vertical correto (true = yDown)
-        fontPadrao = new BitmapFont(true);
-        fontTitulo = new BitmapFont(true);
-        fontLetras = new BitmapFont(true);
+        // Fonte padrão do LibGDX
+        fontTitulo = new BitmapFont();
+        fontPadrao = new BitmapFont();
+        fontPalavrasLista = new BitmapFont();
+        fontLetras = new BitmapFont();
 
-        // Ativa filtro Linear para deixar o texto liso e nítido
-        fontPadrao.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        fontTitulo.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-        fontLetras.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        // Ajusta o tamanho
+        fontTitulo.getData().setScale(3f);
+        fontPadrao.getData().setScale(2f);
+        fontPalavrasLista.getData().setScale(2f);
+        fontLetras.getData().setScale(3f);
 
         setScreen(new TelaMenu(this));
     }
@@ -39,6 +43,7 @@ public class Main extends Game {
         if (fontPadrao != null) fontPadrao.dispose();
         if (fontTitulo != null) fontTitulo.dispose();
         if (fontLetras != null) fontLetras.dispose();
-        super.dispose(); // <--- AGORA O MÉTODO FECHA CORRETAMENTE AQUI
+        if (fontPalavrasLista != null) fontPalavrasLista.dispose();
+        super.dispose();
     }
 }

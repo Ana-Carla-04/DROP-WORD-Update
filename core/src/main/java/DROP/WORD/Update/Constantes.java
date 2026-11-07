@@ -27,5 +27,5 @@ public class Constantes {
 
     public static final int GRID_COLS = 5;
     public static final int GRID_ROWS = 6;
-    public static final int CELL_PADDING = 4;
+    public static final int CELL_PADDING = 2;
 }

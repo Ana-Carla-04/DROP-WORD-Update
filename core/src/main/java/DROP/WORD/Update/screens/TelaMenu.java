@@ -20,13 +20,13 @@ public class TelaMenu extends ScreenAdapter {
     private final Main game;
     private final OrthographicCamera camera;
 
-    // Dimensões do Pygame
+    // Retângulos com Y ajustado para a câmera padrão (Y para cima)
+    // Título em cima (Y=400), Play no meio (Y=260), Exit embaixo (Y=120)
     private final Rectangle caixaPrincipal = new Rectangle(20, 20, Constantes.LARGURA_TELA - 40, Constantes.ALTURA_TELA - 40);
-    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 7f, 100, 600, 100);
+    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 7f, 400, 600, 100);
     private final Rectangle botaoPlay = new Rectangle(Constantes.LARGURA_TELA / 2f - 130, 260, 260, 80);
-    private final Rectangle botaoExit = new Rectangle(Constantes.LARGURA_TELA / 2f - 110, 380, 220, 70);
+    private final Rectangle botaoExit = new Rectangle(Constantes.LARGURA_TELA / 2f - 110, 120, 220, 70);
 
-    // Cores originais
     private final Color corFundoExterno = Color.valueOf("dfb0b0");
     private final Color corFundoInterno = Color.valueOf("f4d8d9");
     private final Color corBordaInterna = Color.valueOf("8f8b8b");
@@ -48,7 +48,8 @@ public class TelaMenu extends ScreenAdapter {
     public TelaMenu(Main game) {
         this.game = game;
         this.camera = new OrthographicCamera();
-        this.camera.setToOrtho(true, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        // CÂMERA PADRÃO (Y para cima)
+        this.camera.setToOrtho(false, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
     }
 
     @Override
@@ -58,6 +59,7 @@ public class TelaMenu extends ScreenAdapter {
             public boolean touchDown(int screenX, int screenY, int pointer, int button) {
                 mousePos.set(screenX, screenY, 0);
                 camera.unproject(mousePos);
+
 
                 if (botaoPlay.contains(mousePos.x, mousePos.y)) {
                     List<String> palavras = Arrays.asList(
@@ -78,11 +80,14 @@ public class TelaMenu extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+
+
         Gdx.gl.glClearColor(corFundoExterno.r, corFundoExterno.g, corFundoExterno.b, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         mousePos.set(Gdx.input.getX(), Gdx.input.getY(), 0);
         camera.unproject(mousePos);
+
 
         boolean hoverPlay = botaoPlay.contains(mousePos.x, mousePos.y);
         boolean hoverExit = botaoExit.contains(mousePos.x, mousePos.y);
@@ -91,26 +96,20 @@ public class TelaMenu extends ScreenAdapter {
         game.shapeRenderer.setProjectionMatrix(camera.combined);
         game.batch.setProjectionMatrix(camera.combined);
 
-        // 1. FUNDOS PREENCHIDOS
         game.shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Caixa grande
         game.shapeRenderer.setColor(corFundoInterno);
         game.shapeRenderer.rect(caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height);
 
-        // Caixa do título
         game.shapeRenderer.setColor(corTituloCaixa);
         game.shapeRenderer.rect(caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height);
 
-        // Fundo do botão Play
         game.shapeRenderer.setColor(hoverPlay ? corBotaoHover : corBotao);
         game.shapeRenderer.rect(botaoPlay.x, botaoPlay.y, botaoPlay.width, botaoPlay.height);
 
-        // Fundo do botão Exit
         game.shapeRenderer.setColor(hoverExit ? corBotaoHover : corBotao);
         game.shapeRenderer.rect(botaoExit.x, botaoExit.y, botaoExit.width, botaoExit.height);
 
-        // 2. BORDAS RETAS LIMPAS (Sem círculos nos cantos)
         desenharBordaRetangulo(game.shapeRenderer, caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height, 3, corBordaInterna);
         desenharBordaRetangulo(game.shapeRenderer, caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height, 6, corTituloBorda);
 
@@ -121,43 +120,37 @@ public class TelaMenu extends ScreenAdapter {
         desenharBordaRetangulo(game.shapeRenderer, botaoExit.x, botaoExit.y, botaoExit.width, botaoExit.height, 3, bordaExit);
 
         game.shapeRenderer.end();
-
-        // 3. TEXTOS
         game.batch.begin();
 
-        // Título "WORD DROP"
-        game.fontTitulo.getData().setScale(3.6f);
-        layout.setText(game.fontTitulo, "WORD DROP");
+        // Título (Y centralizado com sinal de MENOS)
         game.fontTitulo.setColor(corTextoTitulo);
+        layout.setText(game.fontTitulo, "WORD DROP");
         game.fontTitulo.draw(game.batch, "WORD DROP",
             caixaTitulo.x + (caixaTitulo.width - layout.width) / 2f,
-            caixaTitulo.y + (caixaTitulo.height - layout.height) / 2f);
+            caixaTitulo.y + (caixaTitulo.height + layout.height) / 2f);
 
-        // PLAY
-        game.fontPadrao.getData().setScale(2.1f);
-        String txtPlay = "PLAY";
-        layout.setText(game.fontPadrao, txtPlay);
+        // PLAY (Y centralizado com sinal de MENOS)
         game.fontPadrao.setColor(hoverPlay ? corTextoBotaoHover : corTextoBotao);
-        game.fontPadrao.draw(game.batch, txtPlay,
+        layout.setText(game.fontPadrao, "PLAY");
+        game.fontPadrao.draw(game.batch, "PLAY",
             botaoPlay.x + (botaoPlay.width - layout.width) / 2f,
-            botaoPlay.y + (botaoPlay.height - layout.height) / 2f);
+            botaoPlay.y + (botaoPlay.height + layout.height) / 2f);
 
-        // EXIT
-        String txtExit = "EXIT";
-        layout.setText(game.fontPadrao, txtExit);
+        // EXIT (Y centralizado com sinal de MENOS)
         game.fontPadrao.setColor(hoverExit ? corTextoBotaoHover : corTextoBotao);
-        game.fontPadrao.draw(game.batch, txtExit,
+        layout.setText(game.fontPadrao, "EXIT");
+        game.fontPadrao.draw(game.batch, "EXIT",
             botaoExit.x + (botaoExit.width - layout.width) / 2f,
-            botaoExit.y + (botaoExit.height - layout.height) / 2f);
+            botaoExit.y + (botaoExit.height + layout.height) / 2f);
 
         game.batch.end();
     }
 
     private void desenharBordaRetangulo(ShapeRenderer shape, float x, float y, float w, float h, float espessura, Color cor) {
         shape.setColor(cor);
-        shape.rect(x, y, w, espessura);                         // Topo
-        shape.rect(x, y + h - espessura, w, espessura);         // Fundo
-        shape.rect(x, y, espessura, h);                         // Esquerda
-        shape.rect(x + w - espessura, y, espessura, h);         // Direita
+        shape.rect(x, y, w, espessura);
+        shape.rect(x, y + h - espessura, w, espessura);
+        shape.rect(x, y, espessura, h);
+        shape.rect(x + w - espessura, y, espessura, h);
     }
 }

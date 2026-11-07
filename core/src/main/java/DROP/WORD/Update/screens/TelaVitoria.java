@@ -12,15 +12,18 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
 import DROP.WORD.Update.Constantes;
 import DROP.WORD.Update.Main;
-import DROP.WORD.Update.entities.GerenciadorLetras;
 
 public class TelaVitoria extends ScreenAdapter {
     private final Main game;
     private final OrthographicCamera camera;
 
     private final Rectangle caixaPrincipal = new Rectangle(20, 20, Constantes.LARGURA_TELA - 40, Constantes.ALTURA_TELA - 40);
-    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 7f, 100, 600, 100);
-    private final Rectangle botaoMenu = new Rectangle(Constantes.LARGURA_TELA / 2f - 100, 400, 200, 60);
+
+    // INVERTIDO: caixaTitulo estava em Y=100 (baixo), agora está no topo
+    private final Rectangle caixaTitulo = new Rectangle(Constantes.LARGURA_TELA / 7f, Constantes.ALTURA_TELA - 200, 600, 100);
+
+    // INVERTIDO: botaoMenu estava em Y=400 (meio-alto), agora está mais para baixo
+    private final Rectangle botaoMenu = new Rectangle(Constantes.LARGURA_TELA / 2f - 100, 150, 200, 60);
 
     private final Color corFundoExterno = Color.valueOf("dfb0b0");
     private final Color corFundoInterno = Color.valueOf("a2c8a5");
@@ -42,7 +45,7 @@ public class TelaVitoria extends ScreenAdapter {
     public TelaVitoria(Main game) {
         this.game = game;
         this.camera = new OrthographicCamera();
-        this.camera.setToOrtho(true, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
+        this.camera.setToOrtho(false, Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
     }
 
     @Override
@@ -75,7 +78,6 @@ public class TelaVitoria extends ScreenAdapter {
         game.shapeRenderer.setProjectionMatrix(camera.combined);
         game.batch.setProjectionMatrix(camera.combined);
 
-        // 1. FORMAS PREENCHIDAS
         game.shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         game.shapeRenderer.setColor(corFundoInterno);
         game.shapeRenderer.rect(caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height);
@@ -86,7 +88,6 @@ public class TelaVitoria extends ScreenAdapter {
         game.shapeRenderer.setColor(estaSobreBotao ? corBotaoHover : corBotao);
         game.shapeRenderer.rect(botaoMenu.x, botaoMenu.y, botaoMenu.width, botaoMenu.height);
 
-        // 2. BORDAS RETAS
         desenharBorda(game.shapeRenderer, caixaPrincipal.x, caixaPrincipal.y, caixaPrincipal.width, caixaPrincipal.height, 3, corBordaInterna);
         desenharBorda(game.shapeRenderer, caixaTitulo.x, caixaTitulo.y, caixaTitulo.width, caixaTitulo.height, 3, corTituloBorda);
 
@@ -94,37 +95,25 @@ public class TelaVitoria extends ScreenAdapter {
         desenharBorda(game.shapeRenderer, botaoMenu.x, botaoMenu.y, botaoMenu.width, botaoMenu.height, 3, bordaMenu);
         game.shapeRenderer.end();
 
-        // 3. TEXTOS
         game.batch.begin();
-        game.fontTitulo.getData().setScale(3.0f);
-        layout.setText(game.fontTitulo, "PARABÉNS!");
-
-        // Sombra
-        game.fontTitulo.setColor(corFundoInterno);
-        game.fontTitulo.draw(game.batch, "PARABÉNS!",
-            caixaTitulo.x + (caixaTitulo.width - layout.width) / 2f + 3,
-            caixaTitulo.y + (caixaTitulo.height - layout.height) / 2f + 3);
-
-        // Texto principal
         game.fontTitulo.setColor(Color.BLACK);
+        layout.setText(game.fontTitulo, "PARABÉNS!");
         game.fontTitulo.draw(game.batch, "PARABÉNS!",
             caixaTitulo.x + (caixaTitulo.width - layout.width) / 2f,
-            caixaTitulo.y + (caixaTitulo.height - layout.height) / 2f);
+            caixaTitulo.y + (caixaTitulo.height + layout.height) / 2f);
 
-        // Mensagem
-        game.fontPadrao.getData().setScale(2.2f);
         game.fontPadrao.setColor(Color.BLACK);
-        layout.setText(game.fontPadrao, "VOCÊ GANHOU! ");
-        game.fontPadrao.draw(game.batch, "VOCÊ GANHOU! ", Constantes.LARGURA_TELA / 2f - layout.width / 2f, 270);
+        layout.setText(game.fontPadrao, "VOCÊ GANHOU!");
+        // INVERTIDO: Y mudou de 300 (baixo) para 400 (meio-alto)
+        game.fontPadrao.draw(game.batch, "VOCÊ GANHOU!",
+            Constantes.LARGURA_TELA / 2f - layout.width / 2f,
+            Constantes.ALTURA_TELA / 2f);
 
-        // Botão MENU
-        game.fontPadrao.getData().setScale(1.8f);
-        String txtMenu = "MENU";
-        layout.setText(game.fontPadrao, txtMenu);
         game.fontPadrao.setColor(estaSobreBotao ? corTextoBotaoHover : corTextoBotao);
-        game.fontPadrao.draw(game.batch, txtMenu,
+        layout.setText(game.fontPadrao, "MENU");
+        game.fontPadrao.draw(game.batch, "MENU",
             botaoMenu.x + (botaoMenu.width - layout.width) / 2f,
-            botaoMenu.y + (botaoMenu.height - layout.height) / 2f);
+            botaoMenu.y + (botaoMenu.height + layout.height) / 2f);
 
         game.batch.end();
     }

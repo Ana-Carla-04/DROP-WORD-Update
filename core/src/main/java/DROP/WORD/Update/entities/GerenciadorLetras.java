@@ -1,9 +1,12 @@
 package DROP.WORD.Update.entities;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.HdpiUtils;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.TimeUtils;
 import DROP.WORD.Update.Constantes;
@@ -54,6 +57,42 @@ public class GerenciadorLetras {
         gerarSequenciaDeLetras();
         gerarNovaLetra();
     }
+
+    // ------------------------------------------------------------------
+    // Auxiliares de posição (Y do LibGDX cresce para CIMA; linha 0 = topo)
+    // ------------------------------------------------------------------
+
+    /** Y do topo do grid. */
+    private float topoDoGrid() {
+        return y + Constantes.GRID_ROWS * cellH;
+    }
+
+    /** Y da base da célula da linha r (0 = topo, GRID_ROWS-1 = fundo). */
+    private float yDaLinha(int r) {
+        return y + (Constantes.GRID_ROWS - 1 - r) * cellH;
+    }
+
+    /** Primeira linha livre da coluna, de baixo pra cima (-1 se estiver cheia). */
+    private int linhaDestino(int col) {
+        for (int r = Constantes.GRID_ROWS - 1; r >= 0; r--) {
+            if (grid[r][col] == null) return r;
+        }
+        return -1;
+    }
+
+    /** Só permite desenhar dentro da área do grid. */
+    private void ativarClipDoGrid() {
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST);
+        HdpiUtils.glScissor(x, y, cellW * Constantes.GRID_COLS, cellH * Constantes.GRID_ROWS);
+    }
+
+    private void desativarClipDoGrid() {
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST);
+    }
+
+    // ------------------------------------------------------------------
+    // Geração das letras
+    // ------------------------------------------------------------------
 
     public void gerarSequenciaDeLetras() {
         this.numPalavras = gp.palavras.size();
@@ -110,8 +149,16 @@ public class GerenciadorLetras {
         LetraInfo info = sequenciaDeLetras.get(proximoIndiceLetra % totalLetras);
         proximoIndiceLetra++;
         int startXCol = 2;
-        this.atual = new LetraCaindo(info.letra, info.palavraIndex, info.pos, startXCol, this.y + 10, 80, info.cor);
+
+        // A base da carta nasce colada no topo do grid; o clip esconde a carta
+        // até ela começar a entrar (efeito de "surgir" de dentro do grid).
+        this.atual = new LetraCaindo(info.letra, info.palavraIndex, info.pos,
+            startXCol, topoDoGrid(), 80, info.cor);
     }
+
+    // ------------------------------------------------------------------
+    // Movimento
+    // ------------------------------------------------------------------
 
     public void moverLetraEsquerda() {
         if (atual == null || pausado) return;
@@ -144,11 +191,6 @@ public class GerenciadorLetras {
         boolean allCompletas = true;
         for (boolean c : gp.completadas.values()) if (!c) allCompletas = false;
 
-        boolean any0 = false;
-        for (int c = 0; c < Constantes.GRID_COLS; c++) {
-            if (grid[0][c] != null) { any0 = true; break; }
-        }
-
         if (pausado) {
             if (TimeUtils.millis() - pausaInicio >= 1000) {
                 pausado = false;
@@ -158,27 +200,26 @@ public class GerenciadorLetras {
             return;
         }
 
-        if (atual == null && !allCompletas && !any0 && !pausado) {
+        if (atual == null && !allCompletas) {
             gerarNovaLetra();
             return;
         }
 
-        if (allCompletas || any0 || atual == null) return;
+        if (allCompletas || atual == null) return;
 
-        atual.y += atual.vel * dt;
+        // Cai para baixo (subtrai Y no LibGDX)
+        atual.y -= atual.vel * dt;
 
-        float bottomY = y + altura - cellH / 2.0f;
-        if (atual.y >= bottomY) {
-            fixarAtualNaColuna(atual.col);
+        int destino = linhaDestino(atual.col);
+        if (destino < 0) { // coluna cheia
+            atual = null;
             return;
         }
 
-        int row = (int) ((atual.y - y) / cellH);
-        if (row >= Constantes.GRID_ROWS - 1) {
-            fixarAtualNaColuna(atual.col);
-            return;
-        }
-        if (grid[row + 1][atual.col] != null) {
+        // Para exatamente em cima da última letra da coluna, ou no chão do grid
+        float yDestino = yDaLinha(destino);
+        if (atual.y <= yDestino) {
+            atual.y = yDestino;
             fixarAtualNaColuna(atual.col);
         }
     }
@@ -186,6 +227,7 @@ public class GerenciadorLetras {
     public void fixarAtualNaColuna(int col) {
         if (atual == null) return;
 
+        // Primeira linha vazia de BAIXO para CIMA
         for (int r = Constantes.GRID_ROWS - 1; r >= 0; r--) {
             if (grid[r][col] == null) {
                 grid[r][col] = atual.character;
@@ -222,12 +264,16 @@ public class GerenciadorLetras {
         removerLinha(ultimaLinhaValida);
     }
 
+    // ------------------------------------------------------------------
+    // Desenho
+    // ------------------------------------------------------------------
+
     public void desenharGradeVazia(ShapeRenderer shape) {
         for (int c = 0; c < Constantes.GRID_COLS; c++) {
             for (int r = 0; r < Constantes.GRID_ROWS; r++) {
                 if (grid[r][c] == null) {
                     int rx = x + c * cellW + Constantes.CELL_PADDING;
-                    int ry = y + r * cellH + Constantes.CELL_PADDING;
+                    int ry = (int) yDaLinha(r) + Constantes.CELL_PADDING;
                     int rw = cellW - 2 * Constantes.CELL_PADDING;
                     int rh = cellH - 2 * Constantes.CELL_PADDING;
 
@@ -239,11 +285,12 @@ public class GerenciadorLetras {
     }
 
     public void desenharBlocosDeLetras(ShapeRenderer shape) {
+        // Letras fixas no grid
         for (int c = 0; c < Constantes.GRID_COLS; c++) {
             for (int r = 0; r < Constantes.GRID_ROWS; r++) {
                 if (grid[r][c] != null) {
                     int rx = x + c * cellW + Constantes.CELL_PADDING;
-                    int ry = y + r * cellH + Constantes.CELL_PADDING;
+                    int ry = (int) yDaLinha(r) + Constantes.CELL_PADDING;
                     int rw = cellW - 2 * Constantes.CELL_PADDING;
                     int rh = cellH - 2 * Constantes.CELL_PADDING;
 
@@ -254,7 +301,11 @@ public class GerenciadorLetras {
             }
         }
 
+        // Letra em queda (cortada na área do grid)
         if (atual != null) {
+            shape.flush();          // envia o que já foi desenhado, sem corte
+            ativarClipDoGrid();
+
             int c = atual.col;
             int rx = x + c * cellW + Constantes.CELL_PADDING;
             int ry = (int) atual.y + Constantes.CELL_PADDING;
@@ -264,6 +315,9 @@ public class GerenciadorLetras {
             shape.setColor(corFundoCartaoLetra);
             shape.rect(rx, ry, rw, rh);
             desenharBorda(shape, rx, ry, rw, rh, 4, corBordaCartao);
+
+            shape.flush();          // desenha a carta com o corte ativo
+            desativarClipDoGrid();
         }
     }
 
@@ -274,22 +328,29 @@ public class GerenciadorLetras {
                 Character val = grid[r][c];
                 if (val != null) {
                     int rx = x + c * cellW + Constantes.CELL_PADDING;
-                    int ry = y + r * cellH + Constantes.CELL_PADDING;
+                    int ry = (int) yDaLinha(r) + Constantes.CELL_PADDING;
                     int rw = cellW - 2 * Constantes.CELL_PADDING;
                     int rh = cellH - 2 * Constantes.CELL_PADDING;
 
                     Color cor = gridCores[r][c] != null ? gridCores[r][c] : Constantes.COR_LETRA_FIXA;
                     String texto = String.valueOf(val).toUpperCase();
 
-                    // Usa a nova função de contorno
-                    desenharTextoComBordaGrossa(batch, font, texto, cor, Color.WHITE, 2,
-                        rx + rw / 2f, ry + rh / 2f);
+                    layout.setText(font, texto);
+                    font.setColor(cor);
+
+                    float textX = rx + (rw - layout.width) / 2f;
+                    float textY = ry + (rh + layout.height) / 2f;
+
+                    font.draw(batch, texto, textX, textY);
                 }
             }
         }
 
-        // Letra em queda
+        // Letra em queda (cortada na área do grid)
         if (atual != null) {
+            batch.flush();
+            ativarClipDoGrid();
+
             int c = atual.col;
             int rx = x + c * cellW + Constantes.CELL_PADDING;
             int ry = (int) atual.y + Constantes.CELL_PADDING;
@@ -297,33 +358,17 @@ public class GerenciadorLetras {
             int rh = cellH - 2 * Constantes.CELL_PADDING;
 
             String texto = String.valueOf(atual.character).toUpperCase();
-            desenharTextoComBordaGrossa(batch, font, texto, atual.cor, Color.WHITE, 2,
-                rx + rw / 2f, ry + rh / 2f);
+            layout.setText(font, texto);
+            font.setColor(atual.cor);
+
+            float textX = rx + (rw - layout.width) / 2f;
+            float textY = ry + (rh + layout.height) / 2f;
+
+            font.draw(batch, texto, textX, textY);
+
+            batch.flush();
+            desativarClipDoGrid();
         }
-    }
-
-    // MÉTODO RECUPERADO: Desenha texto com contorno grosso
-    public static void desenharTextoComBordaGrossa(SpriteBatch batch, BitmapFont font, String texto,
-                                                   Color corTexto, Color corBorda, int grossura,
-                                                   float centerX, float centerY) {
-        // CORREÇÃO: Criamos um GlyphLayout local em vez de usar o da classe
-        GlyphLayout layoutLocal = new GlyphLayout(font, texto);
-        float textX = centerX - layoutLocal.width / 2f;
-        float textY = centerY - layoutLocal.height / 2f;
-
-        // Desenha a borda (offset em 8 direções)
-        font.setColor(corBorda);
-        for (int dx = -grossura; dx <= grossura; dx++) {
-            for (int dy = -grossura; dy <= grossura; dy++) {
-                if (dx != 0 || dy != 0) {
-                    font.draw(batch, texto, textX + dx, textY + dy);
-                }
-            }
-        }
-
-        // Desenha o texto principal
-        font.setColor(corTexto);
-        font.draw(batch, texto, textX, textY);
     }
 
     private void desenharBorda(ShapeRenderer shape, float x, float y, float w, float h, float espessura, Color cor) {
