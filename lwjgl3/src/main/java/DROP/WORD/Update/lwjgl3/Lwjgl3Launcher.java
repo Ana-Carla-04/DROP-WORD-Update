@@ -12,7 +12,7 @@ public class Lwjgl3Launcher {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
         config.setTitle("Word Drop");
         config.setWindowedMode(Constantes.LARGURA_TELA, Constantes.ALTURA_TELA);
-        config.setResizable(false);
+        config.setResizable(true);
         config.useVsync(true);
         config.setForegroundFPS(Constantes.FPS);
 
