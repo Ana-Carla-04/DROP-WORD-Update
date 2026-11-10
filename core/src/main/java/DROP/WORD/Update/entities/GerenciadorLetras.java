@@ -141,12 +141,15 @@ public class GerenciadorLetras {
         LetraInfo info = filaDeLetras.desenfileirar();
         if (info == null) return;
 
+        // Inicia a letra logo acima do topo visível do tabuleiro (emergindo de cima suavemente)
+        float startY = this.y - cellH + Constantes.CELL_PADDING;
+
         this.atual = new LetraCaindo(
             info.getLetra(),
             info.getPalavraIndex(),
             info.getPos(),
             Constantes.COLUNA_INICIAL_LETRA,
-            this.y + 10,
+            startY,
             velocidadeQuedaBase,
             info.getCor()
         );
@@ -159,14 +162,22 @@ public class GerenciadorLetras {
     public void moverLetraEsquerda() {
         if (atual == null || pausadoPorPalavra) return;
         if (atual.getCol() > 0) {
-            atual.setCol(atual.getCol() - 1);
+            int novaCol = atual.getCol() - 1;
+            int linhaPouso = getLinhaPouso(novaCol);
+            if (linhaPouso >= 0 && atual.getY() <= y + linhaPouso * cellH) {
+                atual.setCol(novaCol);
+            }
         }
     }
 
     public void moverLetraDireita() {
         if (atual == null || pausadoPorPalavra) return;
         if (atual.getCol() < Constantes.GRID_COLS - 1) {
-            atual.setCol(atual.getCol() + 1);
+            int novaCol = atual.getCol() + 1;
+            int linhaPouso = getLinhaPouso(novaCol);
+            if (linhaPouso >= 0 && atual.getY() <= y + linhaPouso * cellH) {
+                atual.setCol(novaCol);
+            }
         }
     }
 
@@ -215,19 +226,16 @@ public class GerenciadorLetras {
         float multiplicador = acelerandoQueda ? Constantes.VELOCIDADE_QUEDA_RAPIDA_MULTIPLICADOR : 1.0f;
         atual.adicionarY(atual.getVel() * multiplicador * dt);
 
-        float bottomY = y + altura - cellH / 2.0f;
-        if (atual.getY() >= bottomY) {
-            fixarAtualNaColuna(atual.getCol());
-            return;
-        }
-
-        int row = (int) ((atual.getY() - y) / cellH);
-        if (row >= Constantes.GRID_ROWS - 1) {
-            fixarAtualNaColuna(atual.getCol());
-            return;
-        }
-        if (grid[row + 1][atual.getCol()] != null) {
-            fixarAtualNaColuna(atual.getCol());
+        int col = atual.getCol();
+        int linhaPouso = getLinhaPouso(col);
+        if (linhaPouso >= 0) {
+            float alvoY = y + linhaPouso * cellH;
+            if (atual.getY() >= alvoY) {
+                atual.setY(alvoY);
+                fixarAtualNaColuna(col);
+            }
+        } else {
+            fixarAtualNaColuna(col);
         }
     }
 

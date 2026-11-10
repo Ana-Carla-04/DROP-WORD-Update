@@ -146,13 +146,71 @@ public class GerenciadorArquivos {
     }
 
     /**
-     * Sorteia N palavras-alvo para a partida a partir do dicionário carregado.
+     * Sorteia N palavras-alvo para a partida a partir do dicionário carregado,
+     * garantindo que nenhum par de palavras compartilhe mais de uma letra na mesma coluna (posição).
+     * Isso impede ambiguidades e colisões excessivas de letras nas mesmas colunas da grade.
      */
     public static List<String> sortearPalavrasPartida(List<String> dicionarioOrdenado, int quantidade) {
+        if (dicionarioOrdenado == null || dicionarioOrdenado.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         List<String> copia = new ArrayList<>(dicionarioOrdenado);
+        int maxTentativas = 20;
+
+        for (int tentativa = 0; tentativa < maxTentativas; tentativa++) {
+            Collections.shuffle(copia);
+            List<String> selecionadas = new ArrayList<>();
+
+            for (String candidata : copia) {
+                if (candidata.length() != Constantes.GRID_COLS) continue;
+
+                boolean compativel = true;
+                for (String jaEscolhida : selecionadas) {
+                    if (contarLetrasIguaisMesmaPosicao(candidata, jaEscolhida) > 1) {
+                        compativel = false;
+                        break;
+                    }
+                }
+
+                if (compativel) {
+                    selecionadas.add(candidata);
+                    if (selecionadas.size() == quantidade) {
+                        return selecionadas;
+                    }
+                }
+            }
+
+            if (selecionadas.size() == quantidade) {
+                return selecionadas;
+            }
+        }
+
+        // Fallback defensivo caso não complete (muito improvável dado o tamanho do dicionário):
+        // completa com as palavras restantes disponíveis
         Collections.shuffle(copia);
-        int limite = Math.min(quantidade, copia.size());
-        return new ArrayList<>(copia.subList(0, limite));
+        List<String> fallback = new ArrayList<>();
+        for (String w : copia) {
+            if (w.length() == Constantes.GRID_COLS && !fallback.contains(w)) {
+                fallback.add(w);
+                if (fallback.size() == quantidade) break;
+            }
+        }
+        return fallback;
+    }
+
+    /**
+     * Conta quantas letras coincidem na exata mesma posição (coluna) entre duas palavras.
+     */
+    public static int contarLetrasIguaisMesmaPosicao(String p1, String p2) {
+        int iguais = 0;
+        int tam = Math.min(p1.length(), p2.length());
+        for (int i = 0; i < tam; i++) {
+            if (p1.charAt(i) == p2.charAt(i)) {
+                iguais++;
+            }
+        }
+        return iguais;
     }
 
     /**

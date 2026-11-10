@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import DROP.WORD.Update.Constantes;
@@ -42,6 +43,8 @@ public class TelaJogo extends ScreenAdapter {
     private final Rectangle caixaStatus = new Rectangle(18, 90, 330, 50);
     private final Rectangle caixaHudTopo = new Rectangle(380, 18, 430, 42);
     private final Rectangle cartaoProximaLetra = new Rectangle(388, 22, 34, 34);
+    private final Rectangle areaClipGrade = new Rectangle(xAreaJogo, yAreaJogo, larguraAreaJogo, alturaAreaJogo);
+    private final Rectangle scissorClipGrade = new Rectangle();
 
     private final GlyphLayout layout = new GlyphLayout();
 
@@ -327,7 +330,18 @@ public class TelaJogo extends ScreenAdapter {
 
         gl.desenharGradeVazia(sr);
         gl.desenharPreviaQueda(sr); // Prévia de queda destacando a célula de destino!
+
+        // Recorta os blocos de letras para que emerjam aos poucos a partir do topo do tabuleiro
+        sr.flush();
+        ScissorStack.calculateScissors(camera, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight(), sr.getTransformMatrix(), areaClipGrade, scissorClipGrade);
+        boolean clippouShape = ScissorStack.pushScissors(scissorClipGrade);
+
         gl.desenharBlocosDeLetras(sr);
+
+        if (clippouShape) {
+            sr.flush();
+            ScissorStack.popScissors();
+        }
 
         RenderUtils.desenharBorda(sr, xAreaJogo - 2, yAreaJogo - 2, larguraAreaJogo + 4, alturaAreaJogo + 4, 3, Constantes.COR_BORDA);
 
@@ -384,20 +398,19 @@ public class TelaJogo extends ScreenAdapter {
             cartaoProximaLetra.y + cartaoProximaLetra.height / 2f
         );
 
-        // 2. Rótulo "PRÓXIMA" e detalhe de coluna (no Fácil)
+        // 2. Rótulo "PRÓXIMA" e detalhe de coluna (no Fácil) sem sobreposição
         fontPequena.setColor(Constantes.COR_TEXTO);
-        String txtRotulo = "PRÓXIMA";
         if (dif == Constantes.Dificuldade.FACIL && prox != null) {
-            txtRotulo = "PRÓXIMA (col " + (prox.getPos() + 1) + "):";
+            fontPequena.draw(batch, "PRÓXIMA", cartaoProximaLetra.x + cartaoProximaLetra.width + 10, caixaHudTopo.y + 8);
+            fontPequena.draw(batch, "COLUNA " + (prox.getPos() + 1), cartaoProximaLetra.x + cartaoProximaLetra.width + 10, caixaHudTopo.y + 24);
         } else {
-            txtRotulo = "PRÓXIMA:";
+            fontPequena.draw(batch, "PRÓXIMA", cartaoProximaLetra.x + cartaoProximaLetra.width + 10, caixaHudTopo.y + 16);
         }
-        fontPequena.draw(batch, txtRotulo, cartaoProximaLetra.x + cartaoProximaLetra.width + 8, caixaHudTopo.y + 14);
 
         // 3. Atalhos do HUD alinhados à direita
         String atalhosTxt = "[P] PAUSA  [M] SOM  [R] REINICIAR";
         layout.setText(fontPequena, atalhosTxt);
-        fontPequena.draw(batch, atalhosTxt, caixaHudTopo.x + caixaHudTopo.width - layout.width - 12, caixaHudTopo.y + 14);
+        fontPequena.draw(batch, atalhosTxt, caixaHudTopo.x + caixaHudTopo.width - layout.width - 12, caixaHudTopo.y + 16);
 
         // Palavras da lista
         for (int i = 0; i < palavras.size(); i++) {
@@ -415,8 +428,17 @@ public class TelaJogo extends ScreenAdapter {
             );
         }
 
-        // Letras da grade
+        // Letras da grade (recortadas para emergir aos poucos a partir do topo do tabuleiro)
+        batch.flush();
+        ScissorStack.calculateScissors(camera, viewport.getScreenX(), viewport.getScreenY(), viewport.getScreenWidth(), viewport.getScreenHeight(), batch.getTransformMatrix(), areaClipGrade, scissorClipGrade);
+        boolean clippouBatch = ScissorStack.pushScissors(scissorClipGrade);
+
         gl.desenharTextos(batch, fontLetras);
+
+        if (clippouBatch) {
+            batch.flush();
+            ScissorStack.popScissors();
+        }
 
         // Mensagem de palavra formada em pausa de comemoração
         if (gl.isPausadoPorPalavra() && gl.getPalavraEmPausa() != null) {
